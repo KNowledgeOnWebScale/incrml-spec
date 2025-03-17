@@ -1,0 +1,345 @@
+<pre class="metadata">
+Title: Incremental RDF Mapping Language
+Shortname: IncRML
+Level: none
+Status: LD
+Repository: KNowledgeOnWebScale/incrml
+URL: https://knowledgeonwebscale.github.io/incrml/
+Editor: Dylan Van Assche, https://dylanvanassche.be/#me
+Editor: Julian Rojas, https://julianrojas.org/#me
+Editor: Pieter Colpaert, https://pietercolpaert.be
+Abstract: IncRML combines the RDF Mapping Language (RML) with the Function Ontology (FnO) to detect changes in datasets and incrementally map them into a Knowledge Graph.
+Markup Shorthands: markdown yes, css no
+</pre>
+
+# Introduction # {#intro}
+
+Incorporating new data into a Knowledge Graph is a tedious process
+because the whole Knowledge Graph must be regenerated,
+even though only a small part of the dataset was changed.
+IncRML avoid this problem by analyzing and comparing the dataset against the previous versions
+to detect the actual changes and incorporate only those changes into an existing Knowledge Graph
+to reduce the execution time and computing resources necessary to update the Knowledge Graph.
+IncRML achieves this by combining the RDF Mapping Languahe (RML) for the mapping
+and the Function Ontology (FnO) for the change detection.
+Optionally, IncRML can make use of Linked Data Event Streams (LDES) to also publish the changes
+in the Knowledge Graph as a stream of events.
+However, IncRML can be used stand-alone as well in existing systems.
+
+IncRML paper is currently under review at the [Semantic Web Journal](https://semantic-web-journal.net/system/files/swj3790.pdf).
+
+<img src="images/pipeline.png" alt="Incremental Knowledge Graph construction pipeline combining RML and FnO as IncRML." width="100%">
+<i>
+IncRML (top green row) combines RML+FnO (middle pink row).
+FnO described functions perform CDC based on the characteristics of the dataset and RML for constructing RDF from the detected changes.
+Changed RDF quads may be published as an LDES via an LDES Event Stream Logical Target.
+The pipeline is continuously executed to extract changes from new versions of the datasets.
+IncRML can be used by any RML engine with support for FnO (orange squares).
+Example data (bottom blue row) shows how data creations (green), data updates (yellow), and data deletions (red) are detected through CDC FnO functions.
+It is assumed that the previous state contains info on data rows with IDs 0, 1, 2, and 3.
+The extracted changes are then incrementally transformed into RDF and published as LDES members.
+</i>
+
+# Change Data Capture (CDC) # {#cdc}
+
+IncRML uses FnO functions to perform Change Data Capture (CDC) on the datasets from which the Knowledge Graph are generated from.
+Each type of change has its own FnO function.
+IncRML considers 3 type of changes:
+
+- **Create**: a new entity has been added to the dataset.
+- **Update**: an existing entity has been updated in the dataset such as a new property, removed property or a new value for a property.
+- **Delete**: an existing entity was removed from the dataset.
+
+Changes could be explicitely or implicitely:
+
+- **Explicitely**: dataset advertises the type of change for each entity.
+- **Implicitely**: dataset changes the entity without advertising the change.
+
+<img src="images/algorithm.png" alt="CDC algorithm for detecting changes" width="100%">
+<i>Change Data Capture algorithm applied by IncRML to detect implicit changes between different data versions. IncRML relies on the data source for change detection if the changes are explicitely advertised.</i>
+
+This results into the follow FnO functions being available in the RMLMapper:
+
+<table>
+  <tr>
+    <th>FnO function</th>
+    <th>Purpose</th>
+  </tr>
+  <tr>
+    <td>`idlab-fn:explicitCreate`</td>
+    <td>Detect explicitly created members by checking if the member IRI existed already.</td>
+  </tr>
+  <tr>
+    <td>`idlab-fn:explicitUpdate`</td>
+    <td>Detect explicitly updated members by checking if the member IRI existed already.</td>
+  </tr>
+  <tr>
+    <td>`idlab-fn:explicitDelete`</td>
+    <td>Detect explicitly deleted members by checking if the member IRI existed already.</td>
+  </tr>
+  <tr>
+    <td>`idlab-fn:implicitCreate`</td>
+    <td>Detect implicitly created members by checking if the member IRI existed already.</td>
+  </tr>
+  <tr>
+    <td>`idlab-fn:implicitUpdate`</td>
+    <td>Detect implicitly updated members by checking if the member IRI already existed and its watched
+properties have changed.</td>
+  </tr>
+  <tr>
+    <td>`idlab-fn:implicitDelete`</td>
+    <td>Detect implicitly deleted members by marking each member IRI as seen and after processing all the
+members, returning the set of member IRIs which were not seen compared to the previous version.</td>
+  </tr>
+</table>
+
+# LDES Event Stream Logical Target
+
+IncRML can be combined with a LDES Event Stream Logical Target to also publish the set of changes
+in a Knowledge Graph as a stream of events. This is optional, but allows to consumers to ingest the changes
+efficiently to keep their local version of the Knowledge Graph in sync.
+
+# Example
+
+IncRML is demonstrated in the following example where a CSV file is updated:
+
+- **Create**: entity `Root` is created.
+- **Update**: entities `Harold Finch` and `John Reese` have their `Age` property incremented.
+- **Delete**: entity `Agent Carter` is removed.
+- **Unchanged**: entity `The Machine` remains unchanged.
+
+<div class="example">
+**Input data 1 (base version)**
+```
+ID,Name,Age
+0,The Machine,0
+1,Harold Finch,44
+2,John Reese,38
+3,Agent Carter,36
+```
+
+**Input data 2 (changed version)**
+```
+ID,Name,Age
+0,The Machine,0
+1,Harold Finch,46
+2,John Reese,40
+3,Root,35
+```
+
+**RML mapping with FnO CDC functions**
+
+```turtle
+# Logical Target for outputting W3C ActivityStreams 2.0 event log as an LDES
+<#LDESLogicalTargetAS> a rmlt:EventStreamTarget;
+    rmlt:target [ a void:Dataset; 
+      void:dataDump <file:///eventlog.nq>;
+    ];
+    rmlt:serialization formats:N-Quads;
+    rmlt:ldes [ a ldes:EventStream;
+      ldes:timestampPath dct:created;
+      ldes:versionOfPath dct:isVersionOf;
+      tree:shape <https://example.org/shape/>;
+    ];
+    rmlt:ldesBaseIRI <https://example.org/ldes/eventlog/>;
+    rmlt:ldesGenerateImmutableIRI "true"^^xsd:boolean
+.
+
+# Logical Target for outputting data collection member changes as an LDES
+<#LDESLogicalTargetMember> a rmlt:EventStreamTarget;
+    rmlt:target [ a void:Dataset;
+      void:dataDump <file:///members.nq>;
+    ];
+    rmlt:serialization formats:N-Quads;
+    rmlt:ldes [ a ldes:EventStream;
+      ldes:timestampPath dct:created;
+      ldes:versionOfPath dct:isVersionOf;
+      tree:shape <https://example.org/shape/>;
+    ];
+    rmlt:ldesBaseIRI <https://example.org/ldes/members/>;
+    rmlt:ldesGenerateImmutableIRI "true"^^xsd:boolean
+.
+
+# Input CSV file as datasource
+<#DataSource> a rml:LogicalSource;
+  rml:source "data.csv";
+  rml:referenceFormulation ql:CSV
+.
+
+# Dedicated named graph for each change type
+# W3C ActivityStreams 2.0 eventlog generation of created members
+<#TriplesMapASCreate> a rr:TriplesMap;
+  rml:logicalSource <#DataSource>;
+  rr:subjectMap [
+    rr:constant "http://blue-bike.be/event/create";
+    rr:class as:Create;
+    rml:logicalTarget <#LDESLogicalTargetAS>;
+  ]
+.
+
+# W3C ActivityStreams 2.0 eventlog generation of updated members
+<#TriplesMapASUpdate> a rr:TriplesMap;
+  rml:logicalSource <#DataSource>;
+  rr:subjectMap [
+    rr:constant "http://blue-bike.be/event/update";
+    rr:class as:Update;
+    rml:logicalTarget <#LDESLogicalTargetAS>;
+  ]
+.
+
+# W3C ActivityStreams 2.0 eventlog generation of deleted members
+<#TriplesMapASDelete> a rr:TriplesMap;
+  rml:logicalSource <#DataSource>;
+  rr:subjectMap [
+    rr:constant "http://blue-bike.be/event/delete";
+    rr:class as:Delete;
+    rml:logicalTarget <#LDESLogicalTargetAS>;
+  ]
+.
+
+# Data collection member
+<#PersonName> a rr:PredicateObjectMap;
+  rr:predicate schema:name; 
+  rr:objectMap [
+    rml:reference "name";
+    rr:datatype xsd:string;
+  ];
+.
+
+# Dedicated Triples Map per change type
+# Detection of explicit member creations with FnO function,
+# if the member IRI is not found in the state, a new created member is generated.
+<#TriplesMapObjectCreate> a rr:TriplesMap;
+  rml:logicalSource <#DataSource>;
+  rr:subjectMap [
+    fnml:functionValue [
+      rr:predicateObjectMap [
+        rr:predicate fno:executes;
+        rr:object idlab-fn:explicitCreate;
+      ];
+      rr:predicateObjectMap [ 
+        rr:predicate idlab-fn:iri; 
+        rr:objectMap [
+          rr:template "https://example.org/member/{id}"
+        ];
+      ];
+    ];
+    rr:graph <http://example.org/event/create>;
+    rr:class foaf:Person;
+    rml:logicalTarget <#LDESLogicalTargetMember>;
+  ];
+  rr:predicateObjectMap <#PersonName>
+.
+
+# Detection of implicit member updates with FnO function
+# Looks up the property 'name' of a member with the IRI of the member,
+# if changed, an updated member is generated.
+<#TriplesMapObjectUpdate> a rr:TriplesMap;
+  rml:logicalSource <#DataSource>;
+  rr:subjectMap [
+    fnml:functionValue [
+      rr:predicateObjectMap [
+        rr:predicate fno:executes;
+        rr:object idlab-fn:implicitUpdate;
+      ];
+      rr:predicateObjectMap [
+        rr:predicate idlab-fn:iri ;
+        rr:objectMap [
+          rr:template "https://example.org/member/{id}";
+        ];
+      ];
+      # Watch property 'name' of member for changes
+      rr:predicateObjectMap [ 
+        rr:predicate idlab-fn:watchedProperty;
+        rr:objectMap [ rr:template "name={name}" ]
+      ];
+    ];
+    rr:graph <http://blue-bike.be/event/update>;
+    rr:class foaf:Person;
+    rml:logicalTarget <#LDESLogicalTargetMember>;
+  ];
+  rr:predicateObjectMap <#PersonName>
+.
+
+# Detection of implicit member deletions with FnO function by IRI
+# If member IRI is removed in the new version, a member as tombstone is generated.
+<#TriplesMapObjectDelete> a rr:TriplesMap;
+  rml:logicalSource <#DataSource>;
+  rr:subjectMap [
+    fnml:functionValue [
+      rr:predicateObjectMap [ 
+        rr:predicate fno:executes;
+        rr:object idlab-fn:implicitDelete;
+      ];
+      rr:predicateObjectMap [
+        rr:predicate idlab-fn:iri;
+        rr:objectMap [
+          rr:template "https://example.org/member/{id}"
+        ];
+      ];
+    ];
+    rr:graph <http://blue-bike.be/event/delete>;
+    rr:class foaf:Person;
+    rml:logicalTarget <#LDESLogicalTargetMember>;
+  ]
+.
+```
+
+**Output data 1 in TriG (base version)**
+```turtle
+:Created {
+ <http://ex.org/Mbr0#0> a foaf:Person .
+ <http://ex.org/Mbr0#0> foaf:name "The Machine" .
+ <http://ex.org/Mbr0#0> foaf:age "0"^^xsd:int .
+ 
+ <http://ex.org/Mbr1#0> a foaf:Person .
+ <http://ex.org/Mbr1#0> foaf:name "Harold Finch" .
+ <http://ex.org/Mbr1#0> foaf:age "44"^^xsd:int .
+ 
+ <http://ex.org/Mbr2#0> a foaf:Person .
+ <http://ex.org/Mbr2#0> foaf:name "John Reese" .
+ <http://ex.org/Mbr2#0> foaf:age "38"^^xsd:int .
+ 
+ <http://ex.org/Mbr3#0> a foaf:Person .
+ <http://ex.org/Mbr3#0> foaf:name "Agent Carter" .
+ <http://ex.org/Mbr3#0> foaf:age "36"^^xsd:int .
+}
+```
+
+**Output data 2 in TriG (changed version)**
+```turtle
+:Created { 
+ <http://ex.org/Mbr4#0> a foaf:Person .
+ <http://ex.org/Mbr4#0> foaf:name "Root" .
+ <http://ex.org/Mbr4#0> foaf:age "35"^^xsd:int .
+}
+
+:Updated { 
+ <http://ex.org/Mbr1#1> a foaf:Person .
+ <http://ex.org/Mbr1#1> foaf:name "Harold Finch" .
+ <http://ex.org/Mbr1#1> foaf:age "46"^^xsd:int .
+  
+ <http://ex.org/Mbr2#1> a foaf:Person .
+ <http://ex.org/Mbr2#1> foaf:name "John Reese".
+ <http://ex.org/Mbr2#1> foaf:age "40"^^xsd:int .
+}
+
+:Deleted { 
+ <http://ex.org/Mbr3#1> a foaf:Person .
+}
+```
+
+**Event log with named graph metadata**
+```turtle
+# Named graph for created members of data collection
+:Created a as:Create;
+  as:actor <http://ex.org/data-collection> .
+# Named graph for updated members of data collection
+:Updated a as:Update;
+  as:actor <http://ex.org/data-collection> .
+# Named graph for deleted members of data collection
+:Deleted a as:Delete;
+  as:actor <http://ex.org/data-collection> .
+```
+
+</div>
