@@ -21,13 +21,13 @@ even though only a small part of the dataset was changed.
 IncRML avoid this problem by analyzing and comparing the dataset against the previous versions
 to detect the actual changes and incorporate only those changes into an existing Knowledge Graph
 to reduce the execution time and computing resources necessary to update the Knowledge Graph.
-IncRML achieves this by combining the RDF Mapping Languahe (RML) for the mapping
+IncRML achieves this by combining the RDF Mapping Language (RML) for the mapping
 and the Function Ontology (FnO) for the change detection.
-Optionally, IncRML can make use of Linked Data Event Streams (LDES) to also publish the changes
+Optionally, IncRML can make use of [Linked Data Event Streams](https://w3id.org/ldes/specification) (LDES) to also publish the changes
 in the Knowledge Graph as a stream of events.
 However, IncRML can be used stand-alone as well in existing systems.
 
-IncRML paper is currently under review at the [Semantic Web Journal](https://semantic-web-journal.net/system/files/swj3790.pdf).
+An IncRML paper is currently under review at the [Semantic Web Journal](https://semantic-web-journal.net/system/files/swj3790.pdf).
 
 <img src="images/pipeline.png" alt="Incremental Knowledge Graph construction pipeline combining RML and FnO as IncRML." width="100%">
 <i>
