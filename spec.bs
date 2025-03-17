@@ -4,7 +4,7 @@ Shortname: IncRML
 Level: none
 Status: LD
 Repository: KNowledgeOnWebScale/incrml
-URL: https://knowledgeonwebscale.github.io/incrml/
+URL: https://knowledgeonwebscale.github.io/incrml-spec/
 Editor: Dylan Van Assche, https://dylanvanassche.be/#me
 Editor: Julian Rojas, https://julianrojas.org/#me
 Editor: Ben De Meester, https://work.de-meester.org/
