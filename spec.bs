@@ -7,6 +7,7 @@ Repository: KNowledgeOnWebScale/incrml
 URL: https://knowledgeonwebscale.github.io/incrml/
 Editor: Dylan Van Assche, https://dylanvanassche.be/#me
 Editor: Julian Rojas, https://julianrojas.org/#me
+Editor: Ben De Meester, https://work.de-meester.org/
 Editor: Pieter Colpaert, https://pietercolpaert.be
 Abstract: IncRML combines the RDF Mapping Language (RML) with the Function Ontology (FnO) to detect changes in datasets and incrementally map them into a Knowledge Graph.
 Markup Shorthands: markdown yes, css no
